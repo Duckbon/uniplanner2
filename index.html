@@ -183,6 +183,20 @@ textarea.input{resize:vertical;min-height:130px;line-height:1.5}
 .quick .input{flex:1 1 200px}
 .quick select.input{flex:0 1 170px}
 .center{align-self:center}
+.quick input[type="date"].input{flex:0 1 160px}
+.subjects{display:flex;gap:8px;flex-wrap:wrap}
+.sub-btn{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:9px 16px;font-weight:700;display:flex;align-items:center;gap:8px}
+.sub-btn:hover{border-color:var(--accent)}
+.sub-btn .n{font-size:12.5px;font-weight:800;color:var(--muted);font-variant-numeric:tabular-nums}
+.sub-btn[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.sub-btn[aria-pressed="true"] .n{color:var(--accent-ink);opacity:.8}
+.sub-btn[aria-pressed="true"] .dot{background:var(--accent-ink)}
+.seg-wrap{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted);font-weight:700}
+.seg{display:flex;background:var(--surface-2);border-radius:999px;padding:3px;gap:2px}
+.seg button{border:0;background:none;border-radius:999px;padding:4px 11px;font-weight:800;font-size:13.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(42,33,64,.12)}
+.day-actions{display:flex;gap:14px;flex-wrap:wrap}
+#saveState[data-state="local"]{color:var(--warn);font-weight:700}
 
 /* classes */
 .klass{background:var(--surface);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
@@ -218,6 +232,8 @@ textarea.input{resize:vertical;min-height:130px;line-height:1.5}
 .day .dots{display:flex;gap:3px;height:8px;align-items:center}
 .day .dot{width:7px;height:7px}
 .day .dot.hollow{background:transparent;box-shadow:inset 0 0 0 1.5px var(--c,var(--accent))}
+.day.sel .dot{background:var(--accent-ink);box-shadow:none}
+.day.sel .dot.hollow{background:transparent;box-shadow:inset 0 0 0 1.5px var(--accent-ink)}
 .cal-legend{display:flex;gap:16px;font-size:13px;color:var(--muted);margin-top:12px;flex-wrap:wrap}
 .cal-legend span{display:flex;align-items:center;gap:6px}
 
@@ -344,13 +360,17 @@ dialog::backdrop{background:rgba(28,20,48,.5)}
         <div class="view-head"><h1 id="hello">Hello, Tash</h1><p id="todayQuote"></p></div>
         <div id="launch"></div>
         <div class="section">
-          <div class="sec-head"><span class="sec-title">Up next</span><span class="note" id="taskCount"></span></div>
+          <div class="sec-head"><span class="sec-title">To do</span>
+            <div class="seg-wrap"><span id="segLabel">Show</span><div class="seg" id="countSeg" role="group" aria-labelledby="segLabel"></div></div></div>
+          <div class="subjects" id="subjectChips" role="group" aria-label="Pick a subject"></div>
           <div id="todayTasks"></div>
           <form class="quick" id="quickForm" autocomplete="off">
             <input class="input" id="quickTitle" placeholder="Add one small step" aria-label="New step" maxlength="140">
+            <input class="input" id="quickDate" type="date" aria-label="Day for this step">
             <select class="input" id="quickClass" aria-label="Class"></select>
             <button class="btn soft" type="submit">Add</button>
           </form>
+          <p class="note">A new step goes on today in your calendar unless you pick another day.</p>
         </div>
       </section>
 
@@ -361,7 +381,7 @@ dialog::backdrop{background:rgba(28,20,48,.5)}
       </section>
 
       <section class="view" id="v-calendar" hidden>
-        <div class="view-head"><h1>Calendar</h1><p>Pick a day to see what is due.</p></div>
+        <div class="view-head"><h1>Calendar</h1><p>Pick a day to see what is due and which steps you planned for it.</p></div>
         <div class="cal" id="cal"></div>
         <div class="section" id="calDay"></div>
       </section>
@@ -383,7 +403,7 @@ dialog::backdrop{background:rgba(28,20,48,.5)}
     </main>
 
     <footer class="foot">
-      <span id="saveState">Saved on this laptop</span>
+      <span id="saveState" data-state="pending">Connecting to the database…</span>
       <span class="spacer"></span>
       <button class="link" type="button" data-act="limited-on">Limited mode</button>
       <button class="link" type="button" data-act="reset" id="resetBtn">Start over</button>
@@ -437,6 +457,7 @@ function fmtDate(s){return parse(s).toLocaleDateString('en-AU',{weekday:'short',
 function dueLabel(n){if(n<0)return (-n)+(n===-1?' day':' days')+' past due';if(n===0)return 'Due today';if(n===1)return 'Due tomorrow';return 'T-minus '+n+' days'}
 function dueTone(n){return n<0?'urgent':n<=3?'warn':''}
 function plural(n,w){return n+' '+w+(n===1?'':(/ss$/.test(w)?'es':'s'))}
+function dayLabel(ds){var n=daysUntil(ds);if(n===0)return 'Today';if(n===1)return 'Tomorrow';if(n===-1)return 'From yesterday';if(n<0)return 'From '+fmtDate(ds);return fmtDate(ds)}
 function dueInline(n){var l=dueLabel(n);return n>=2?l:l.toLowerCase()}
 
 var COLORS=['#7B4FD6','#C05BB8','#2F9C95','#D08A2E','#4B7BD8','#D25E7C'];
@@ -497,7 +518,7 @@ function quoteFor(dateStr){var p=dateStr.split('-').map(Number);return QUOTES[(p
 
 /* ---------- state ---------- */
 var KEY='slow-orbit-v1';
-function blank(){return {v:1,onboarded:false,limited:false,classes:[],assessments:[],tasks:[],updatedAt:0}}
+function blank(){return {v:1,onboarded:false,limited:false,classes:[],assessments:[],tasks:[],prefs:{subject:'',count:3},updatedAt:0}}
 function normalize(o){
   var b=blank();
   if(!o||typeof o!=='object')return b;
@@ -505,13 +526,13 @@ function normalize(o){
   if(Array.isArray(o.classes))b.classes=o.classes.filter(function(c){return c&&c.id&&c.name});
   if(Array.isArray(o.assessments))b.assessments=o.assessments.filter(function(a){return a&&a.id&&a.title});
   if(Array.isArray(o.tasks))b.tasks=o.tasks.filter(function(t){return t&&t.id&&t.title});
+  if(o.prefs&&typeof o.prefs==='object'){b.prefs.subject=String(o.prefs.subject||'');var pc=Number(o.prefs.count);b.prefs.count=[0,1,2,3,5].indexOf(pc)>=0?pc:3}
   return b;
 }
 function loadLocal(){try{var raw=localStorage.getItem(KEY);if(raw)return normalize(JSON.parse(raw))}catch(e){}return blank()}
 var S=loadLocal();
-var dirtySinceLoad=false;
 function persistLocal(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
-function save(){S.updatedAt=Date.now();dirtySinceLoad=true;persistLocal();queueMirror()}
+function save(){S.updatedAt=Date.now();persistLocal();queueStore()}
 
 function cls(id){return S.classes.find(function(c){return c.id===id})||null}
 function assess(id){return S.assessments.find(function(a){return a.id===id})||null}
@@ -533,37 +554,50 @@ function classOptions(sel,withNone){
     return '<option value="'+esc(c.id)+'"'+(c.id===sel?' selected':'')+'>'+esc(c.name)+'</option>'}).join('');
 }
 
-/* ---------- optional account backup (private to the signed-in viewer) ---------- */
-var mirror=null,mirrorBusy=false,mirrorQueued=false,mirrorTimer=null;
-function setSaveState(){var el=$('#saveState');if(el)el.textContent=mirror?'Saved on this laptop and backed up to your Claude account':'Saved on this laptop'}
-function queueMirror(){if(!mirror)return;clearTimeout(mirrorTimer);mirrorTimer=setTimeout(pushMirror,1500)}
-function pushMirror(){
-  if(!mirror)return;
-  if(mirrorBusy){mirrorQueued=true;return}
-  mirrorBusy=true;
-  mirror.set({json:JSON.stringify(S),updatedAt:S.updatedAt}).catch(function(e){
-    if(!e||e.code!=='unavailable'){mirror=null;setSaveState()}
-  }).then(function(){mirrorBusy=false;if(mirrorQueued){mirrorQueued=false;queueMirror()}});
+/* ---------- database: one shared plan document, with this browser as a fallback copy ---------- */
+var store=null,storeState='pending',storeWhy='',storeDead=false,storeBusy=false,storeQueued=false,storeTimer=null,storeTried=0,storeReadyCbs=[];
+function setSaveState(){
+  var el=$('#saveState');if(!el)return;
+  el.textContent=storeState==='db'?'Saved to the database':storeState==='pending'?'Connecting to the database…':'Not in the database yet. Saved in this browser only'+(storeWhy?' ('+storeWhy+')':'');
+  el.dataset.state=storeState;
 }
-function initMirror(){
-  if(!window.claude||typeof window.claude.use!=='function')return;
-  Promise.all([window.claude.use('db'),window.claude.use('user')]).then(function(r){
-    var db=r[0],user=r[1];if(!db||!user)return null;
-    return user.id().then(function(id){
-      if(!id)return null;
-      var ref=db.doc('data/users/'+id+'/plan');
-      return ref.get().then(function(snap){
-        mirror=ref;setSaveState();
-        if(snap.exists){
-          var remote=null;try{remote=JSON.parse(snap.data().json)}catch(e){}
-          if(remote&&!dirtySinceLoad&&(Number(remote.updatedAt)||0)>(S.updatedAt||0)){
-            S=normalize(remote);persistLocal();route();renderAll();return;
-          }
-        }
-        if(S.updatedAt)pushMirror();
-      });
+function storeSettled(){var cbs=storeReadyCbs;storeReadyCbs=[];cbs.forEach(function(f){f()})}
+function storeFail(why,dead){store=null;storeState='local';storeWhy=why;if(dead)storeDead=true;setSaveState();storeSettled()}
+function queueStore(){
+  if(storeState==='local'&&!storeDead&&Date.now()-storeTried>20000){initStore();return}
+  if(!store||storeState!=='db')return;
+  clearTimeout(storeTimer);storeTimer=setTimeout(pushStore,400);
+}
+function pushStore(){
+  if(!store||storeState!=='db')return;
+  clearTimeout(storeTimer);
+  if(storeBusy){storeQueued=true;return}
+  storeBusy=true;
+  var sent=S.updatedAt;
+  store.set({json:JSON.stringify(S),updatedAt:sent}).then(function(){
+    storeBusy=false;
+    if(storeQueued||S.updatedAt!==sent){storeQueued=false;pushStore()}
+  },function(e){
+    storeBusy=false;var code=(e&&e.code)||'error';
+    if(code==='unavailable'){storeTimer=setTimeout(pushStore,3000);return}
+    storeFail(code==='invalid_argument'?'this account can view the page but not save to it':code,code==='invalid_argument');
+  });
+}
+function initStore(){
+  storeTried=Date.now();
+  if(!window.claude||typeof window.claude.use!=='function'){storeFail('no database on this copy of the page',true);return}
+  window.claude.use('db').then(function(db){
+    if(!db){storeFail('sign in to Claude to save to the database',true);return null}
+    var ref=db.doc('plan/tash');
+    return ref.get().then(function(snap){
+      var remote=null;
+      if(snap.exists){try{remote=normalize(JSON.parse(snap.data().json))}catch(e){}}
+      store=ref;storeState='db';storeWhy='';
+      if(remote&&remote.updatedAt>(S.updatedAt||0)){S=remote;persistLocal();route();renderAll()}
+      else if(S.updatedAt&&(!remote||S.updatedAt>remote.updatedAt))pushStore();
+      setSaveState();storeSettled();
     });
-  }).catch(function(){mirror=null;setSaveState()});
+  }).catch(function(e){storeFail((e&&e.code)||'database error',false)});
 }
 
 /* ---------- routing ---------- */
@@ -588,7 +622,12 @@ function renderAll(){
 
 /* ---------- welcome ---------- */
 var enterTimer=null;
-function enter(){if(entered)return;entered=true;clearTimeout(enterTimer);route();renderAll()}
+var wantEnter=false;
+function enter(){
+  if(entered)return;
+  if(storeState==='pending'){wantEnter=true;$('#loadHint').textContent='Fetching your plan from the database…';return}
+  entered=true;clearTimeout(enterTimer);route();renderAll();
+}
 function boot(){
   $$('[data-sloth]').forEach(function(el){el.innerHTML=SLOTH});
   var q=quoteFor(today());
@@ -598,7 +637,12 @@ function boot(){
   if(reduce){$('#enterBtn').hidden=false;$('#loadHint').textContent='Your plan is ready.'}
   else enterTimer=setTimeout(enter,3600);
   $('#welcome').addEventListener('click',enter);
-  setTab('today');route();initMirror();
+  $('#quickDate').value=today();
+  storeReadyCbs.push(function(){if(wantEnter)enter()});
+  setTimeout(function(){if(storeState==='pending')storeFail('the database did not answer',false)},9000);
+  document.addEventListener('visibilitychange',function(){if(document.hidden)pushStore()});
+  window.addEventListener('pagehide',pushStore);
+  setTab('today');route();setSaveState();initStore();
 }
 
 /* ---------- first-time setup ---------- */
@@ -606,7 +650,7 @@ var obStep=0;
 function obTotal(){return S.classes.length+2}
 function renderOnboard(){
   var el=$('#obBody'),n=S.classes.length,html='';
-  if(obStep>n+1)obStep=n+1;
+  if(obStep>n+2)obStep=n+2;
   if(obStep===0){
     html='<div class="ob-card"><div class="ob-sloth">'+SLOTH+'</div>'
       +'<h2>Let’s get the semester out of your head</h2>'
@@ -620,7 +664,7 @@ function renderOnboard(){
       +'<div class="ob-list">'+S.classes.map(function(c){
         return '<div class="ob-item"><span class="dot" style="--c:'+esc(c.color)+'"></span><span class="grow"><b>'+esc(c.name)+'</b></span><button class="icon-btn" type="button" data-act="ob-del-class" data-id="'+esc(c.id)+'" aria-label="Remove '+esc(c.name)+'">'+CROSS+'</button></div>'}).join('')+'</div>'
       +'<div class="ob-nav"><button class="link" type="button" data-act="ob-back">Back</button><button class="btn" type="button" data-act="ob-next"'+(n?'':' disabled')+'>'+(n?'Next: what is due':'Add a class first')+'</button></div></div>';
-  }else if(obStep<=n){
+  }else if(obStep<=n+1){
     var c=S.classes[obStep-2],list=S.assessments.filter(function(a){return a.classId===c.id}).sort(function(a,b){return cmpDue(a.due,b.due)});
     html='<div class="ob-card"><span class="ob-step">Class '+(obStep-1)+' of '+n+'</span>'
       +'<h2><span class="dot" style="--c:'+esc(c.color)+';margin-right:10px"></span>What is due for '+esc(c.name)+'?</h2>'
@@ -632,7 +676,7 @@ function renderOnboard(){
       +'<div><button class="btn soft" type="submit">Add assessment</button> <span class="note" id="obAMsg"></span></div></form>'
       +'<div class="ob-list">'+list.map(function(a){
         return '<div class="ob-item"><span class="grow"><b>'+esc(a.title)+'</b><small>Due '+esc(fmtDate(a.due))+(a.weight?' · '+esc(a.weight)+'%':'')+'</small></span><button class="icon-btn" type="button" data-act="ob-del-a" data-id="'+esc(a.id)+'" aria-label="Remove '+esc(a.title)+'">'+CROSS+'</button></div>'}).join('')+'</div>'
-      +'<div class="ob-nav"><button class="link" type="button" data-act="ob-back">Back</button><button class="btn" type="button" data-act="ob-next">'+(obStep===n?(list.length?'That is everything':'Nothing due, finish'):(list.length?'Next class':'Nothing due, next class'))+'</button></div></div>';
+      +'<div class="ob-nav"><button class="link" type="button" data-act="ob-back">Back</button><button class="btn" type="button" data-act="ob-next">'+(obStep===n+1?(list.length?'That is everything':'Nothing due, finish'):(list.length?'Next class':'Nothing due, next class'))+'</button></div></div>';
   }else{
     var na=nextAssessment();
     html='<div class="ob-card"><div class="ob-sloth">'+SLOTH+'</div>'
@@ -651,8 +695,8 @@ function taskRow(t,opts){
   var c=cls(t.classId),due=taskDue(t),meta=[];
   if(!opts.hideClass&&c)meta.push('<span class="dot" style="--c:'+esc(c.color)+'"></span>'+esc(c.name));
   if(t.mins)meta.push('about '+esc(t.mins)+' min');
-  if(t.due)meta.push('by '+esc(fmtDate(t.due)));
-  else if(due&&!opts.hideClass){var a=assess(t.assessmentId);if(a)meta.push('for '+esc(a.title))}
+  if(t.due&&!opts.hideDay)meta.push(esc(t.done?fmtDate(t.due):dayLabel(t.due)));
+  if(!t.due&&due&&!opts.inClassView){var a=assess(t.assessmentId);if(a)meta.push('for '+esc(a.title))}
   return '<li class="row'+(t.done?' done':'')+'">'
     +'<button class="tick" type="button" role="checkbox" aria-checked="'+(t.done?'true':'false')+'" data-act="toggle-t" data-id="'+esc(t.id)+'" aria-label="'+esc(t.title)+'"></button>'
     +'<div class="row-main"><span class="row-title">'+esc(t.title)+'</span>'+(meta.length?'<span class="row-meta">'+meta.join(' <span aria-hidden="true">·</span> ')+'</span>':'')+'</div>'
@@ -672,7 +716,6 @@ function assessRow(a,opts){
 }
 
 /* ---------- today ---------- */
-var showAllTasks=false;
 function renderToday(){
   var h=new Date().getHours();
   $('#hello').textContent=(h<12?'Good morning':h<18?'Good afternoon':'Good evening')+', Tash';
@@ -690,13 +733,27 @@ function renderToday(){
       +'<div class="launch-foot"><span>'+(ts.length?dn+' of '+plural(ts.length,'step')+' done':'No steps yet. Small steps make this one easier to start.')+'</span>'
       +(ts.length?'':'<button class="btn sm" type="button" data-act="break-a" data-id="'+esc(a.id)+'">Break it into steps</button>')+'</div></div>';
   }
-  var open=openTasks(),lim=showAllTasks?open.length:5,el=$('#todayTasks');
-  $('#taskCount').textContent=open.length?plural(open.length,'step')+' waiting':'';
+  var open=openTasks(),el=$('#todayTasks');
+  var subs=S.classes.map(function(c){return {id:c.id,name:c.name,color:c.color,n:open.filter(function(t){return t.classId===c.id}).length}});
+  var otherN=open.filter(function(t){return !t.classId||!cls(t.classId)}).length;
+  if(otherN)subs.push({id:'_none',name:'Other',color:'',n:otherN});
+  var sel=S.prefs.subject;if(sel&&!subs.some(function(x){return x.id===sel}))sel='';
+  $('#subjectChips').innerHTML=subs.map(function(x){
+    return '<button class="sub-btn" type="button" data-act="pick-subject" data-id="'+esc(x.id)+'" aria-pressed="'+(x.id===sel?'true':'false')+'">'
+      +(x.color?'<span class="dot" style="--c:'+esc(x.color)+'"></span>':'')+esc(x.name)+'<span class="n" aria-label="'+plural(x.n,'step')+' to do">'+x.n+'</span></button>'}).join('');
+  var cnt=S.prefs.count;
+  $('#countSeg').innerHTML=[1,2,3,5,0].map(function(n){
+    return '<button type="button" data-act="pick-count" data-n="'+n+'" aria-pressed="'+(n===cnt?'true':'false')+'">'+(n||'All')+'</button>'}).join('');
   if(!open.length){
     el.innerHTML='<div class="empty-note"><div class="sloth-box">'+SLOTH+'</div><div>Nothing on your list right now. Add one small step below, or use <b>Break it down</b> to turn a big job into little ones.</div></div>';
+  }else if(!sel){
+    el.innerHTML='<div class="empty-note"><div class="sloth-box">'+SLOTH+'</div><div>Pick a subject above to see its steps. You only need to look at one at a time.</div></div>';
   }else{
-    el.innerHTML='<ul class="list">'+open.slice(0,lim).map(function(t){return taskRow(t)}).join('')+'</ul>'
-      +(open.length>5?'<button class="link" type="button" data-act="more-tasks" style="margin-top:8px">'+(showAllTasks?'Show fewer':'Show '+(open.length-5)+' more')+'</button>':'');
+    var mine=open.filter(function(t){return sel==='_none'?(!t.classId||!cls(t.classId)):t.classId===sel});
+    var shown=cnt?mine.slice(0,cnt):mine;
+    el.innerHTML=mine.length?'<ul class="list">'+shown.map(function(t){return taskRow(t,{hideClass:sel!=='_none'})}).join('')+'</ul>'
+        +(mine.length>shown.length?'<p class="note" style="margin-top:8px">Showing '+shown.length+' of '+mine.length+'. The rest can wait.</p>':'')
+      :'<div class="empty-note">Nothing to do for this subject right now.</div>';
   }
   var qc=$('#quickClass'),cur=qc.value;qc.innerHTML=classOptions(cur,true);
 }
@@ -714,7 +771,7 @@ function renderClasses(){
     var sd=!!showDone[c.id];
     function stepList(arr){
       var vis=arr.filter(function(t){return sd||!t.done}).sort(function(a,b){return (a.done-b.done)||((a.createdAt||0)-(b.createdAt||0))});
-      return vis.length?'<ul class="steps">'+vis.map(function(t){return taskRow(t,{hideClass:true})}).join('')+'</ul>':'';
+      return vis.length?'<ul class="steps">'+vis.map(function(t){return taskRow(t,{hideClass:true,inClassView:true})}).join('')+'</ul>':'';
     }
     var blocks=as.map(function(a){
       var mine=ts.filter(function(t){return t.assessmentId===a.id});
@@ -754,12 +811,12 @@ function renderCalendar(){
     var count=it.a.length+it.t.length;
     html+='<button class="day'+(ds===td?' today':'')+(ds===calSel?' sel':'')+'" type="button" data-act="cal-day" data-date="'+ds+'" aria-label="'+esc(fmtDate(ds))+(count?', '+plural(count,'item'):'')+'"'+(ds===calSel?' aria-pressed="true"':'')+'><span>'+d+'</span><span class="dots">'+dots.slice(0,3).join('')+'</span></button>';
   }
-  html+='</div><div class="cal-legend"><span><span class="dot"></span>Assessment due</span><span><span class="dot hollow" style="box-shadow:inset 0 0 0 1.500px var(--accent);background:transparent"></span>Step with its own date</span></div>';
+  html+='</div><div class="cal-legend"><span><span class="dot"></span>Assessment due</span><span><span class="dot hollow" style="box-shadow:inset 0 0 0 1.500px var(--accent);background:transparent"></span>Step planned for that day</span></div>';
   $('#cal').innerHTML=html;
   var sel=dayItems(calSel),n=daysUntil(calSel);
-  var head='<div class="sec-head"><span class="sec-title">'+esc(fmtDate(calSel))+(n===0?' · today':'')+'</span><button class="link" type="button" data-act="add-a" data-date="'+calSel+'">Add an assessment on this day</button></div>';
-  if(!sel.a.length&&!sel.t.length)$('#calDay').innerHTML=head+'<div class="empty-note">Nothing due on this day.</div>';
-  else $('#calDay').innerHTML=head+'<ul class="list">'+sel.a.map(function(a){return assessRow(a,{showClass:true})}).join('')+sel.t.map(function(t){return taskRow(t)}).join('')+'</ul>';
+  var head='<div class="sec-head"><span class="sec-title">'+esc(fmtDate(calSel))+(n===0?' · today':'')+'</span><span class="day-actions"><button class="link" type="button" data-act="add-t" data-date="'+calSel+'">Add a step</button><button class="link" type="button" data-act="add-a" data-date="'+calSel+'">Add an assessment</button></span></div>';
+  if(!sel.a.length&&!sel.t.length)$('#calDay').innerHTML=head+'<div class="empty-note">Nothing planned for this day.</div>';
+  else $('#calDay').innerHTML=head+'<ul class="list">'+sel.a.map(function(a){return assessRow(a,{showClass:true})}).join('')+sel.t.slice().sort(function(a,b){return (a.done-b.done)||((a.createdAt||0)-(b.createdAt||0))}).map(function(t){return taskRow(t,{hideDay:true})}).join('')+'</ul>';
 }
 
 /* ---------- limited mode ---------- */
@@ -805,12 +862,12 @@ function openDlg(kind,id,preset){
       +'<div class="fields two"><div class="field"><label for="fDue">Due date</label><input class="input" id="fDue" type="date" required value="'+esc(item.due||'')+'"></div>'
       +'<div class="field"><label for="fWeight">Worth (%)</label><input class="input" id="fWeight" type="number" min="0" max="100" step="1" value="'+esc(item.weight||'')+'"></div></div></div>';
   }else{
-    item=id?S.tasks.find(function(t){return t.id===id}):{title:'',classId:preset.classId||'',assessmentId:preset.assessmentId||'',due:'',mins:''};if(!item)return;
+    item=id?S.tasks.find(function(t){return t.id===id}):{title:'',classId:preset.classId||'',assessmentId:preset.assessmentId||'',due:preset.due||today(),mins:''};if(!item)return;
     html='<h2>'+(isNew?'Add a step':'Edit step')+'</h2><div class="fields">'
       +'<div class="field"><label for="fTitle">Step</label><input class="input" id="fTitle" maxlength="140" required value="'+esc(item.title)+'" placeholder="Something you could start in five minutes"></div>'
       +'<div class="field"><label for="fClass">Class</label><select class="input" id="fClass">'+classOptions(item.classId,true)+'</select></div>'
       +'<div class="field"><label for="fAssess">Part of</label><select class="input" id="fAssess">'+assessOptions(item.classId,item.assessmentId)+'</select></div>'
-      +'<div class="fields two"><div class="field"><label for="fDue">Own due date (optional)</label><input class="input" id="fDue" type="date" value="'+esc(item.due||'')+'"></div>'
+      +'<div class="fields two"><div class="field"><label for="fDue">Day to do it</label><input class="input" id="fDue" type="date" value="'+esc(item.due||'')+'"></div>'
       +'<div class="field"><label for="fMins">Minutes (optional)</label><input class="input" id="fMins" type="number" min="1" max="240" step="1" value="'+esc(item.mins||'')+'"></div></div></div>';
   }
   var delNote=kind==='class'?'Deleting a class also removes its assessments and steps.':kind==='assess'?'Deleting an assessment also removes its steps.':'';
@@ -930,9 +987,9 @@ function renderDraft(note){
   if(!draft){el.innerHTML='';return}
   if(!draft.length){el.innerHTML='<div class="empty-note">I could not find anything to break down. Try writing one thing per line.</div>';return}
   el.innerHTML=(note?'<p class="note">'+esc(note)+'</p>':'')
-    +'<div class="sec-head"><span class="sec-title">Your small steps</span><span class="note">Untick or reword anything</span></div>'
+    +'<div class="sec-head"><span class="sec-title">Your small steps</span><span class="note">These go on today unless you change the day</span></div>'
     +draft.map(function(g,gi){
-      return '<div class="grp"><div class="grp-head"><h3>'+esc(g.heading)+'</h3><select class="input" id="grpClass'+gi+'" data-g="'+gi+'" aria-label="Class for '+esc(g.heading)+'">'+classOptions(g.classId,true)+'</select></div>'
+      return '<div class="grp"><div class="grp-head"><h3>'+esc(g.heading)+'</h3><select class="input" id="grpClass'+gi+'" data-g="'+gi+'" aria-label="Class for '+esc(g.heading)+'">'+classOptions(g.classId,true)+'</select><input class="input" type="date" id="grpDate'+gi+'" value="'+today()+'" aria-label="Day for '+esc(g.heading)+'" style="flex:0 1 160px"></div>'
         +g.steps.map(function(s,si){
           return '<div class="step-edit"><button class="tick" type="button" role="checkbox" aria-checked="true" data-act="draft-tick" aria-label="Keep this step"></button>'
             +'<input class="input" id="st'+gi+'_'+si+'" data-g="'+gi+'" data-s="'+si+'" value="'+esc(s.title)+'" maxlength="140" aria-label="Step">'
@@ -962,13 +1019,13 @@ function addDraft(){
   if(!draft)return;
   var added=0,now=Date.now();
   draft.forEach(function(g,gi){
-    var sel=$('#grpClass'+gi),cid=sel?sel.value:g.classId;
+    var sel=$('#grpClass'+gi),cid=sel?sel.value:g.classId,gd=($('#grpDate'+gi)||{}).value||today();
     var aid=g.assessmentId&&assess(g.assessmentId)&&assess(g.assessmentId).classId===cid?g.assessmentId:'';
     g.steps.forEach(function(s,si){
       var inp=$('#st'+gi+'_'+si);if(!inp)return;
       var row=inp.closest('.step-edit'),on=$('.tick',row).getAttribute('aria-checked')==='true',title=inp.value.trim();
       if(!on||!title)return;
-      S.tasks.push({id:uid(),title:title,classId:cid||'',assessmentId:aid,due:'',mins:s.mins?String(s.mins):'',done:false,createdAt:now+added});
+      S.tasks.push({id:uid(),title:title,classId:cid||'',assessmentId:aid,due:gd,mins:s.mins?String(s.mins):'',done:false,createdAt:now+added});
       added++;
     });
   });
@@ -1072,7 +1129,10 @@ document.addEventListener('click',function(e){
     case 'limited-on':setLimited(true);break;
     case 'limited-off':setLimited(false);break;
     case 'lim-skip':limSkip++;renderLimited();break;
-    case 'more-tasks':showAllTasks=!showAllTasks;renderToday();break;
+    case 'pick-subject':
+      S.prefs.subject=S.prefs.subject===id?'':id;save();renderToday();
+      if(S.prefs.subject&&S.prefs.subject!=='_none')$('#quickClass').value=S.prefs.subject;break;
+    case 'pick-count':S.prefs.count=Number(b.dataset.n)||0;save();renderToday();break;
     case 'toggle-t':{
       var t=S.tasks.find(function(x){return x.id===id});if(!t)break;
       t.done=!t.done;limSkip=0;save();renderAll();
@@ -1088,7 +1148,7 @@ document.addEventListener('click',function(e){
       if(!S.classes.length){openDlg('class');break}
       openDlg('assess',null,{classId:b.dataset.class,due:b.dataset.date});break;
     case 'edit-a':openDlg('assess',id);break;
-    case 'add-t':openDlg('task',null,{classId:b.dataset.class,assessmentId:b.dataset.assess});break;
+    case 'add-t':openDlg('task',null,{classId:b.dataset.class,assessmentId:b.dataset.assess,due:b.dataset.date});break;
     case 'edit-t':openDlg('task',id);break;
     case 'dlg-close':closeDlg();break;
     case 'dlg-del':deleteDlg();break;
@@ -1114,7 +1174,7 @@ document.addEventListener('click',function(e){
       if(b.dataset.armed!=='1'){b.dataset.armed='1';b.textContent='Tap again to erase everything';
         setTimeout(function(){b.dataset.armed='';b.textContent='Start over'},4000);break}
       b.dataset.armed='';b.textContent='Start over';
-      S=blank();obStep=0;draft=null;save();route();break;
+      S=blank();obStep=0;draft=null;save();pushStore();route();break;
   }
 });
 document.addEventListener('submit',function(e){
@@ -1122,11 +1182,14 @@ document.addEventListener('submit',function(e){
   if(f.id==='dlgForm'){submitDlg();return}
   if(f.id==='quickForm'){
     var v=$('#quickTitle').value.trim();if(!v)return;
-    S.tasks.push({id:uid(),title:v,classId:$('#quickClass').value||'',assessmentId:'',due:'',mins:'',done:false,createdAt:Date.now()});
-    $('#quickTitle').value='';save();renderAll();$('#quickTitle').focus();return}
+    var qd=$('#quickDate').value||today(),qcid=$('#quickClass').value||'';
+    S.tasks.push({id:uid(),title:v,classId:qcid,assessmentId:'',due:qd,mins:'',done:false,createdAt:Date.now()});
+    S.prefs.subject=qcid||'_none';
+    $('#quickTitle').value='';$('#quickDate').value=today();save();renderAll();$('#quickClass').value=qcid;$('#quickTitle').focus();
+    toast(qd===today()?'Added to today.':'Added to '+fmtDate(qd)+'.');return}
   if(f.id==='limForm'){
     var lv=$('#limTitle').value.trim();if(!lv)return;
-    S.tasks.push({id:uid(),title:lv,classId:'',assessmentId:'',due:'',mins:'',done:false,createdAt:Date.now()});
+    S.tasks.push({id:uid(),title:lv,classId:'',assessmentId:'',due:today(),mins:'',done:false,createdAt:Date.now()});
     save();renderAll();return}
   if(f.id==='obClassForm'){
     var name=$('#obClassName').value.trim();if(!name)return;
